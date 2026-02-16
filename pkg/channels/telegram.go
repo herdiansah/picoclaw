@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/mymmrac/telego/telegohandler"
 	tu "github.com/mymmrac/telego/telegoutil"
 
+	"github.com/sipeed/picoclaw/internal/db/sqlite"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
@@ -115,6 +117,11 @@ func (c *TelegramChannel) Start(ctx context.Context) error {
 		return c.commands.List(ctx, message)
 	}, th.CommandEqual("list"))
 
+	// /forget command — clears user's conversation history
+	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
+		return c.commands.Forget(ctx, message)
+	}, th.CommandEqual("forget"))
+
 	bh.HandleMessage(func(ctx *th.Context, message telego.Message) error {
 		return c.handleMessage(ctx, &message)
 	}, th.AnyMessage())
@@ -147,6 +154,16 @@ func (c *TelegramChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	chatID, err := parseChatID(msg.ChatID)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	// Persist bot reply to SQLite (chatID == userID in private chats)
+	if userID, convErr := strconv.ParseInt(msg.ChatID, 10, 64); convErr == nil {
+		if saveErr := sqlite.SaveMessage(userID, fmt.Sprintf("bot: %s", msg.Content)); saveErr != nil {
+			logger.ErrorCF("telegram", "Failed to save bot reply to DB", map[string]interface{}{
+				"error":   saveErr.Error(),
+				"chat_id": msg.ChatID,
+			})
+		}
 	}
 
 	// Stop thinking animation
@@ -353,6 +370,14 @@ func (c *TelegramChannel) handleMessage(ctx context.Context, message *telego.Mes
 		"username":   user.Username,
 		"first_name": user.FirstName,
 		"is_group":   fmt.Sprintf("%t", message.Chat.Type != "private"),
+	}
+
+	// Persist incoming message to SQLite
+	if err := sqlite.SaveMessage(user.ID, fmt.Sprintf("user: %s", content)); err != nil {
+		logger.ErrorCF("telegram", "Failed to save message to DB", map[string]interface{}{
+			"error":   err.Error(),
+			"user_id": user.ID,
+		})
 	}
 
 	c.HandleMessage(fmt.Sprintf("%d", user.ID), fmt.Sprintf("%d", chatID), content, mediaPaths, metadata)

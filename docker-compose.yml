@@ -10,9 +10,12 @@ services:
     container_name: picoclaw-agent
     profiles:
       - agent
+    env_file:
+      - .env
     volumes:
       - ./config/config.json:/root/.picoclaw/config.json:ro
       - picoclaw-workspace:/root/.picoclaw/workspace
+      - picoclaw-history:/app
     entrypoint: ["picoclaw", "agent"]
     stdin_open: true
     tty: true
@@ -29,12 +32,17 @@ services:
     restart: unless-stopped
     profiles:
       - gateway
+    env_file:
+      - .env
     volumes:
       # Configuration file
       - ./config/config.json:/root/.picoclaw/config.json:ro
       # Persistent workspace (sessions, memory, logs)
       - picoclaw-workspace:/root/.picoclaw/workspace
+      # Persistent SQLite history DB
+      - picoclaw-history:/app
     command: ["gateway"]
 
 volumes:
   picoclaw-workspace:
+  picoclaw-history:

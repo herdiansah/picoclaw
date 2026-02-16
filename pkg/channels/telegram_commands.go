@@ -3,9 +3,11 @@ package channels
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/mymmrac/telego"
+	"github.com/sipeed/picoclaw/internal/db/sqlite"
 	"github.com/sipeed/picoclaw/pkg/config"
 )
 
@@ -14,6 +16,7 @@ type TelegramCommander interface {
 	Start(ctx context.Context, message telego.Message) error
 	Show(ctx context.Context, message telego.Message) error
 	List(ctx context.Context, message telego.Message) error
+	Forget(ctx context.Context, message telego.Message) error
 }
 
 type cmd struct {
@@ -40,6 +43,7 @@ func (c *cmd) Help(ctx context.Context, message telego.Message) error {
 /help - Show this help message
 /show [model|channel] - Show current configuration
 /list [models|channels] - List available options
+/forget - Clear your conversation history
 	`
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
@@ -145,6 +149,41 @@ func (c *cmd) List(ctx context.Context, message telego.Message) error {
 	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
 		ChatID: telego.ChatID{ID: message.Chat.ID},
 		Text:   response,
+		ReplyParameters: &telego.ReplyParameters{
+			MessageID: message.MessageID,
+		},
+	})
+	return err
+}
+
+func (c *cmd) Forget(ctx context.Context, message telego.Message) error {
+	// Check if /forget command is enabled
+	if os.Getenv("FORGET_COMMAND_ENABLED") != "true" {
+		_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "The /forget command is currently disabled.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return err
+	}
+
+	userID := message.From.ID
+	if err := sqlite.DeleteHistory(userID); err != nil {
+		_, _ = c.bot.SendMessage(ctx, &telego.SendMessageParams{
+			ChatID: telego.ChatID{ID: message.Chat.ID},
+			Text:   "❌ Failed to clear history. Please try again later.",
+			ReplyParameters: &telego.ReplyParameters{
+				MessageID: message.MessageID,
+			},
+		})
+		return fmt.Errorf("failed to delete history for user %d: %w", userID, err)
+	}
+
+	_, err := c.bot.SendMessage(ctx, &telego.SendMessageParams{
+		ChatID: telego.ChatID{ID: message.Chat.ID},
+		Text:   "✅ Your conversation history has been cleared.",
 		ReplyParameters: &telego.ReplyParameters{
 			MessageID: message.MessageID,
 		},
