@@ -11,6 +11,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"internal/db/sqlite"
 	"io"
 	"io/fs"
 	"net/http"
@@ -155,6 +156,25 @@ func main() {
 			fmt.Printf("Error loading config: %v\n", err)
 			os.Exit(1)
 		}
+
+		// ---------- ADD THIS BLOCK ----------
+		dbPath := os.Getenv("DB_PATH")
+		if dbPath == "" {
+			dbPath = "/app/history.db"
+		}
+
+		if err := sqlite.InitDB(dbPath); err != nil {
+			// Log the error and continue; handlers should handle DB errors gracefully.
+			fmt.Printf("Warning: failed to initialize SQLite DB at %s: %v\n", dbPath, err)
+		} else {
+			// Ensure DB is closed on shutdown
+			defer func() {
+				if err := sqlite.CloseDB(); err != nil {
+					fmt.Printf("Warning: failed to close DB: %v\n", err)
+				}
+			}()
+		}
+		// // ---------- END ADDITION ----------
 
 		workspace := cfg.WorkspacePath()
 		installer := skills.NewSkillInstaller(workspace)
@@ -398,6 +418,25 @@ func agentCmd() {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+
+	// ---------- ADD THIS BLOCK ----------
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "/app/history.db"
+	}
+
+	if err := sqlite.InitDB(dbPath); err != nil {
+		// Log the error and continue; handlers should handle DB errors gracefully.
+		fmt.Printf("Warning: failed to initialize SQLite DB at %s: %v\n", dbPath, err)
+	} else {
+		// Ensure DB is closed on shutdown
+		defer func() {
+			if err := sqlite.CloseDB(); err != nil {
+				fmt.Printf("Warning: failed to close DB: %v\n", err)
+			}
+		}()
+	}
+	// ---------- END ADDITION ----------
 
 	provider, err := providers.CreateProvider(cfg)
 	if err != nil {
@@ -685,6 +724,11 @@ func gatewayCmd() {
 	cronService.Stop()
 	agentLoop.Stop()
 	channelManager.StopAll(ctx)
+	// ---------- ADD THIS BLOCK ----------
+	if err := sqlite.CloseDB(); err != nil {
+		fmt.Printf("Warning: failed to close DB: %v\n", err)
+	}
+	// ---------- END ADDITION ----------
 	fmt.Println("✓ Gateway stopped")
 }
 

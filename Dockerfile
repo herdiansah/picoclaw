@@ -1,9 +1,10 @@
 # ============================================================
-# Stage 1: Build the picoclaw binary
+# Stage 1: Build the picoclaw binary (with CGO for sqlite3)
 # ============================================================
 FROM golang:1.26.0-alpine AS builder
 
-RUN apk add --no-cache git make
+# Install build tools and sqlite dev headers required by github.com/mattn/go-sqlite3
+RUN apk add --no-cache git make build-base sqlite-dev
 
 WORKDIR /src
 
@@ -11,8 +12,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source and build
+# Copy source and build (enable CGO)
 COPY . .
+ENV CGO_ENABLED=1
 RUN make build
 
 # ============================================================
@@ -20,7 +22,7 @@ RUN make build
 # ============================================================
 FROM alpine:3.23
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata sqlite curl
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
@@ -29,8 +31,12 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Copy binary
 COPY --from=builder /src/build/picoclaw /usr/local/bin/picoclaw
 
-# Create picoclaw home directory
+# Run onboard to create default config/workspace
 RUN /usr/local/bin/picoclaw onboard
+
+# Ensure working dir and DB file exist (DB path should be mounted to persist)
+WORKDIR /app
+RUN touch /app/history.db
 
 ENTRYPOINT ["picoclaw"]
 CMD ["gateway"]
