@@ -15,7 +15,7 @@ services:
     volumes:
       - ./config/config.json:/root/.picoclaw/config.json:ro
       - picoclaw-workspace:/root/.picoclaw/workspace
-      - picoclaw-history:/app
+      - picoclaw-history:/app/data
     entrypoint: ["picoclaw", "agent"]
     stdin_open: true
     tty: true
@@ -40,7 +40,7 @@ services:
       # Persistent workspace (sessions, memory, logs)
       - picoclaw-workspace:/root/.picoclaw/workspace
       # Persistent SQLite history DB
-      - picoclaw-history:/app
+      - picoclaw-history:/app/data
     command: ["gateway"]
 
 volumes:

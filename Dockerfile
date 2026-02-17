@@ -34,9 +34,12 @@ COPY --from=builder /src/build/picoclaw /usr/local/bin/picoclaw
 # Run onboard to create default config/workspace
 RUN /usr/local/bin/picoclaw onboard
 
-# Ensure working dir and DB file exist (DB path should be mounted to persist)
+# Ensure working dir and data directory exist
 WORKDIR /app
-RUN touch /app/history.db
+RUN mkdir -p /app/data && touch /app/data/history.db
+
+# Copy config into image (tokens should be overridden via env vars)
+COPY config/config.json /root/.picoclaw/config.json
 
 ENTRYPOINT ["picoclaw"]
 CMD ["gateway"]
